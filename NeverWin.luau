@@ -1766,6 +1766,441 @@ task.spawn(function()
     end
 end)
 
+-- ═══════════════════════════════════════════════════════
+-- ─── COUNTER BLOX SKIN CHANGER ────────────────────────
+-- ═══════════════════════════════════════════════════════
+-- CB stores skins differently from BloxStrike:
+--   • LocalPlayer.SkinFolder.TFolder / CTFolder contain
+--     StringValues named after each weapon.  Setting
+--     .Value = "SkinName" changes the skin server-side.
+--   • The game sends its inventory via a FireServer call
+--     where the first arg is a table of {skinId} entries.
+--     We hook __namecall to append ALL skins to that table
+--     so the server believes you own everything.
+--   • Client.CurrentInventory is also overwritten so the
+--     in-game picker UI shows all skins.
+--
+-- This only runs when IS_COUNTERBLOX is true.
+
+-- Full skin list from the real CB skin changer script
+local CB_ALL_SKINS = {
+    {'AK47_Ace'},{'AK47_Toxic Nitro'},{'AK47_Bloodboom'},{'AK47_Clown'},
+    {'AK47_Code Orange'},{'AK47_Eve'},{'AK47_Gifted'},{'AK47_Glo'},
+    {'AK47_Godess'},{'AK47_Hallows'},{'AK47_Halo'},{'AK47_Hypersonic'},
+    {'AK47_Inversion'},{'AK47_Jester'},{'AK47_Maker'},{'AK47_Mean Green'},
+    {'AK47_Outlaws'},{'AK47_Outrunner'},{'AK47_Patch'},{'AK47_Plated'},
+    {'AK47_Precision'},{'AK47_Quantum'},{'AK47_Quicktime'},{'AK47_Scapter'},
+    {'AK47_Secret Santa'},{'AK47_Shooting Star'},{'AK47_Skin Committee'},
+    {'AK47_Survivor'},{'AK47_Ugly Sweater'},{'AK47_VAV'},{'AK47_Variant Camo'},
+    {'AK47_Yltude'},{'AK47_Scythe'},
+    {'AUG_Chilly Night'},{'AUG_Mystique'},{'AUG_Dream Hound'},{'AUG_Enlisted'},
+    {'AUG_Graffiti'},{'AUG_Homestead'},{'AUG_Maker'},{'AUG_NightHawk'},
+    {'AUG_Phoenix'},{'AUG_Sunsthetic'},
+    {'AWP_Abaddon'},{'AWP_Autumness'},{'AWP_Blastech'},{'AWP_Bloodborne'},
+    {'AWP_Coffin Biter'},{'AWP_Desert Camo'},{'AWP_Difference'},{'AWP_Dragon'},
+    {'AWP_Forever'},{'AWP_Grepkin'},{'AWP_Hika'},{'AWP_Illusion'},
+    {'AWP_Instinct'},{'AWP_JTF2'},{'AWP_Lunar'},{'AWP_Nerf'},
+    {'AWP_Northern Lights'},{'AWP_Pear Tree'},{'AWP_Pink Vision'},
+    {'AWP_Toxic Nitro'},{'AWP_Pinkie'},{'AWP_Quicktime'},{'AWP_Racer'},
+    {'AWP_Regina'},{'AWP_Retroactive'},{'AWP_Scapter'},{'AWP_Silence'},
+    {'AWP_Venomus'},{'AWP_Weeb'},{'AWP_Darkness'},
+    {'Bayonet_Decor'},{'Bayonet_Aequalis'},{'Bayonet_Banner'},{'Bayonet_Candy Cane'},
+    {'Bayonet_Consumed'},{'Bayonet_Cosmos'},{'Bayonet_Crimson Tiger'},
+    {'Bayonet_Crow'},{'Bayonet_Delinquent'},{'Bayonet_Digital'},
+    {'Bayonet_Easy-Bake'},{'Bayonet_Egg Shell'},{'Bayonet_Festive'},
+    {'Bayonet_Frozen Dream'},{'Bayonet_Geo Blade'},{'Bayonet_Ghastly'},
+    {'Bayonet_Goo'},{'Bayonet_Hallows'},{'Bayonet_Intertwine'},
+    {'Bayonet_Marbleized'},{'Bayonet_Mariposa'},{'Bayonet_Naval'},
+    {'Bayonet_Neonic'},{'Bayonet_RSL'},{'Bayonet_Racer'},{'Bayonet_Sapphire'},
+    {'Bayonet_Silent Night'},{'Bayonet_Splattered'},{'Bayonet_Stock'},
+    {'Bayonet_Topaz'},{'Bayonet_Tropical'},{'Bayonet_Twitch'},
+    {'Bayonet_UFO'},{'Bayonet_Wetland'},{'Bayonet_Worn'},{'Bayonet_Wrapped'},
+    {'Butterfly Knife_Snowfall'},{'Butterfly Knife_Aurora'},
+    {'Butterfly Knife_Bloodwidow'},{'Butterfly Knife_Consumed'},
+    {'Butterfly Knife_Cosmos'},{'Butterfly Knife_Crimson Tiger'},
+    {'Butterfly Knife_Crippled Fade'},{'Butterfly Knife_Digital'},
+    {'Butterfly Knife_Egg Shell'},{'Butterfly Knife_Freedom'},
+    {'Butterfly Knife_Frozen Dream'},{'Butterfly Knife_Goo'},
+    {'Butterfly Knife_Hallows'},{'Butterfly Knife_Icicle'},
+    {'Butterfly Knife_Inversion'},{'Butterfly Knife_Jade Dream'},
+    {'Butterfly Knife_Marbleized'},{'Butterfly Knife_Naval'},
+    {'Butterfly Knife_Neonic'},{'Butterfly Knife_Reaper'},
+    {'Butterfly Knife_Ruby'},{'Butterfly Knife_Scapter'},
+    {'Butterfly Knife_Splattered'},{'Butterfly Knife_Stock'},
+    {'Butterfly Knife_Topaz'},{'Butterfly Knife_Tropical'},
+    {'Butterfly Knife_Twitch'},{'Butterfly Knife_Wetland'},
+    {'Butterfly Knife_White Boss'},{'Butterfly Knife_Worn'},
+    {'Butterfly Knife_Wrapped'},{'Butterfly Knife_Argus'},
+    {'CZ_Designed'},{'CZ_Festive'},{'CZ_Holidays'},{'CZ_Lightning'},
+    {'CZ_Orange Web'},{'CZ_Spectre'},
+    {'DesertEagle_Cold Truth'},{'DesertEagle_TC'},{'DesertEagle_Cool Blue'},
+    {'DesertEagle_DropX'},{'DesertEagle_Glittery'},{'DesertEagle_Grim'},
+    {'DesertEagle_Heat'},{'DesertEagle_Honor-bound'},{'DesertEagle_Independence'},
+    {'DesertEagle_Krystallos'},{'DesertEagle_Pumpkin Buster'},{'DesertEagle_ROLVe'},
+    {'DesertEagle_Racer'},{'DesertEagle_Scapter'},{'DesertEagle_Skin Committee'},
+    {'DesertEagle_Survivor'},{'DesertEagle_Weeb'},{'DesertEagle_Xmas'},
+    {'DesertEagle_Cringe'},
+    {'DualBerettas_Carbonized'},{'DualBerettas_Dusty Manor'},{'DualBerettas_Floral'},
+    {'DualBerettas_Hexline'},{'DualBerettas_Neon web'},{'DualBerettas_Old Fashioned'},
+    {'DualBerettas_Xmas'},
+    {'Falchion Knife_Bloodwidow'},{'Falchion Knife_Chosen'},{'Falchion Knife_Coal'},
+    {'Falchion Knife_Consumed'},{'Falchion Knife_Cosmos'},{'Falchion Knife_Crimson Tiger'},
+    {'Falchion Knife_Crippled Fade'},{'Falchion Knife_Digital'},
+    {'Falchion Knife_Egg Shell'},{'Falchion Knife_Festive'},{'Falchion Knife_Freedom'},
+    {'Falchion Knife_Frozen Dream'},{'Falchion Knife_Goo'},{'Falchion Knife_Hallows'},
+    {'Falchion Knife_Inversion'},{'Falchion Knife_Late Night'},
+    {'Falchion Knife_Toxic Nitro'},{'Falchion Knife_Marbleized'},
+    {'Falchion Knife_Naval'},{'Falchion Knife_Neonic'},{'Falchion Knife_Racer'},
+    {'Falchion Knife_Ruby'},{'Falchion Knife_Splattered'},{'Falchion Knife_Stock'},
+    {'Falchion Knife_Topaz'},{'Falchion Knife_Tropical'},{'Falchion Knife_Wetland'},
+    {'Falchion Knife_Worn'},{'Falchion Knife_Wrapped'},{'Falchion Knife_Zombie'},
+    {'Falchion Knife_Pumpkin'},
+    {'Famas_Abstract'},{'Famas_Centipede'},{'Famas_Cogged'},{'Famas_Goliath'},
+    {'Famas_Haunted Forest'},{'Famas_KugaX'},{'Famas_MK11'},{'Famas_Medic'},
+    {'Famas_Redux'},{'Famas_Shocker'},{'Famas_Toxic Rain'},
+    {'FiveSeven_Autumn Fade'},{'FiveSeven_Danjo'},{'FiveSeven_Fluid'},
+    {'FiveSeven_Gifted'},{'FiveSeven_Midnight Ride'},{'FiveSeven_Mr. Anatomy'},
+    {'FiveSeven_Stigma'},{'FiveSeven_Sub Zero'},{'FiveSeven_Summer'},
+    {'Flip Knife_Stock'},
+    {'Galil_Frosted'},{'Galil_Hardware'},{'Galil_Hardware 2'},{'Galil_Toxicity'},{'Galil_Worn'},
+    {'Glock_Angler'},{'Glock_Anubis'},{'Glock_Biotrip'},{'Glock_Day Dreamer'},
+    {'Glock_Desert Camo'},{'Glock_Gravestomper'},{'Glock_Midnight Tiger'},
+    {'Glock_Money Maker'},{'Glock_RSL'},{'Glock_Rush'},{'Glock_Scapter'},
+    {'Glock_Spacedust'},{'Glock_Tarnish'},{'Glock_Underwater'},
+    {'Glock_Wetland'},{'Glock_White Sauce'},
+    {'Gut Knife_Holly'},{'Gut Knife_Banner'},{'Gut Knife_Bloodwidow'},
+    {'Gut Knife_Consumed'},{'Gut Knife_Cosmos'},{'Gut Knife_Crimson Tiger'},
+    {'Gut Knife_Crippled Fade'},{'Gut Knife_Digital'},{'Gut Knife_Egg Shell'},
+    {'Gut Knife_Frozen Dream'},{'Gut Knife_Geo Blade'},{'Gut Knife_Goo'},
+    {'Gut Knife_Hallows'},{'Gut Knife_Lurker'},{'Gut Knife_Marbleized'},
+    {'Gut Knife_Naval'},{'Gut Knife_Neonic'},{'Gut Knife_Present'},
+    {'Gut Knife_Ruby'},{'Gut Knife_Rusty'},{'Gut Knife_Splattered'},
+    {'Gut Knife_Topaz'},{'Gut Knife_Tropical'},{'Gut Knife_Wetland'},
+    {'Gut Knife_Worn'},{'Gut Knife_Wrapped'},
+    {'Huntsman Knife_Spirit'},{'Huntsman Knife_Aurora'},{'Huntsman Knife_Drop-Out'},
+    {'Huntsman Knife_Bloodwidow'},{'Huntsman Knife_Consumed'},{'Huntsman Knife_Cosmos'},
+    {'Huntsman Knife_Cozy'},{'Huntsman Knife_Crimson Tiger'},
+    {'Huntsman Knife_Crippled Fade'},{'Huntsman Knife_Digital'},
+    {'Huntsman Knife_Egg Shell'},{'Huntsman Knife_Frozen Dream'},
+    {'Huntsman Knife_Geo Blade'},{'Huntsman Knife_Goo'},{'Huntsman Knife_Hallows'},
+    {'Huntsman Knife_Honor Fade'},{'Huntsman Knife_Marbleized'},
+    {'Huntsman Knife_Monster'},{'Huntsman Knife_Naval'},{'Huntsman Knife_Ruby'},
+    {'Huntsman Knife_Splattered'},{'Huntsman Knife_Stock'},{'Huntsman Knife_Tropical'},
+    {'Huntsman Knife_Twitch'},{'Huntsman Knife_Wetland'},{'Huntsman Knife_Worn'},
+    {'Huntsman Knife_Wrapped'},
+    {'Karambit_Peppermint'},{'Karambit_Bloodwidow'},{'Karambit_Consumed'},
+    {'Karambit_Cosmos'},{'Karambit_Crimson Tiger'},{'Karambit_Crippled Fade'},
+    {'Karambit_Death Wish'},{'Karambit_Digital'},{'Karambit_Egg Shell'},
+    {'Karambit_Festive'},{'Karambit_Frozen Dream'},{'Karambit_Glossed'},
+    {'Karambit_Gold'},{'Karambit_Goo'},{'Karambit_Hallows'},{'Karambit_Jade Dream'},
+    {'Karambit_Jester'},{'Karambit_Lantern'},{'Karambit_Liberty Camo'},
+    {'Karambit_Marbleized'},{'Karambit_Naval'},{'Karambit_Neonic'},
+    {'Karambit_Pizza'},{'Karambit_Quicktime'},{'Karambit_Racer'},
+    {'Karambit_Ruby'},{'Karambit_Scapter'},{'Karambit_Splattered'},
+    {'Karambit_Stock'},{'Karambit_Topaz'},{'Karambit_Tropical'},
+    {'Karambit_Twitch'},{'Karambit_Wetland'},{'Karambit_Worn'},{'Karambit_Drop-Out'},
+    {'M4A1_Animatic'},{'M4A1_Burning'},{'M4A1_Desert Camo'},{'M4A1_Heavens Gate'},
+    {'M4A1_Impulse'},{'M4A1_Jester'},{'M4A1_Lunar'},{'M4A1_Necropolis'},
+    {'M4A1_Tecnician'},{'M4A1_Toucan'},{'M4A1_Wastelander'},
+    {'M4A4_BOT[S]'},{'M4A4_Candyskull'},{'M4A4_Delinquent'},{'M4A4_Desert Camo'},
+    {'M4A4_Devil'},{'M4A4_Endline'},{'M4A4_Flashy Ride'},{'M4A4_Ice Cap'},
+    {'M4A4_Jester'},{'M4A4_King'},{'M4A4_Mistletoe'},{'M4A4_Pinkie'},
+    {'M4A4_Pinkvision'},{'M4A4_Pondside'},{'M4A4_Precision'},{'M4A4_Quicktime'},
+    {'M4A4_Racer'},{'M4A4_RayTrack'},{'M4A4_Scapter'},{'M4A4_Stardust'},
+    {'M4A4_Toy Soldier'},
+    {'MAC10_Artists Intent'},{'MAC10_Blaze'},{'MAC10_Golden Rings'},{'MAC10_Pimpin'},
+    {'MAC10_Skeleboney'},{'MAC10_Toxic'},{'MAC10_Turbo'},{'MAC10_Wetland'},
+    {'MP9_Blueroyal'},{'MP9_Cob Web'},{'MP9_Cookie Man'},{'MP9_Decked Halls'},
+    {'MP9_SnowTime'},{'MP9_Vaporwave'},{'MP9_Velvita'},{'MP9_Wilderness'},
+    {'Negev_Default'},{'Negev_Midnightbones'},{'Negev_Quazar'},{'Negev_Striped'},
+    {'Negev_Wetland'},{'Negev_Winterfell'},
+    {'Nova_Black Ice'},{'Nova_Cookie'},{'Nova_Paradise'},{'Nova_Sharkesh'},
+    {'Nova_Starry Night'},{'Nova_Terraformer'},{'Nova_Tiger'},
+    {'P250_Amber'},{'P250_Bomber'},{'P250_Equinox'},{'P250_Frosted'},
+    {'P250_Goldish'},{'P250_Green Web'},{'P250_Shark'},{'P250_Solstice'},{'P250_TC250'},
+    {'P90_Demon Within'},{'P90_Elegant'},{'P90_Krampus'},{'P90_Northern Lights'},
+    {'P90_P-Chan'},{'P90_Pine'},{'P90_Redcopy'},{'P90_Skulls'},
+    {'SG_DropX'},{'SG_Dummy'},{'SG_Drop-Out'},{'SG_Kitty Cat'},{'SG_Knighthood'},
+    {'SG_Magma'},{'SG_Variant Camo'},{'SG_Yltude'},
+    {'UMP_Death Grip'},{'UMP_Gum Drop'},{'UMP_Magma'},{'UMP_Militia Camo'},
+    {'UMP_Molten'},{'UMP_Redline'},
+    {'USP_Crimson'},{'USP_Dizzy'},{'USP_Frostbite'},{'USP_Holiday'},
+    {'USP_Jade Dream'},{'USP_Kraken'},{'USP_Nighttown'},{'USP_Paradise'},
+    {'USP_Racing'},{'USP_Skull'},{'USP_Unseen'},{'USP_Worlds Away'},{'USP_Yellowbelly'},
+    {'Handwraps_Wraps'},{'Handwraps_Guts'},{'Handwraps_Toxic Nitro'},
+    {'Handwraps_Wetland'},{'Handwraps_MMA'},{'Handwraps_Ghoul Hex'},
+    {'Handwraps_Mummy'},{'Handwraps_Phantom Hex'},{'Handwraps_Spector Hex'},
+    {'Handwraps_Orange Hex'},{'Handwraps_Purple Hex'},{'Handwraps_Green Hex'},
+    {'Sports Glove_Hazard'},{'Sports Glove_Skulls'},{'Sports Glove_Pumpkin'},
+    {'Sports Glove_Hallows'},{'Sports Glove_Majesty'},{'Sports Glove_Royal'},
+    {'Sports Glove_Weeb'},{'Sports Glove_CottonTail'},{'Sports Glove_RSL'},
+    {'Strapped Glove_Racer'},{'Strapped Glove_Grim'},{'Strapped Glove_Drop-Out'},
+    {'Strapped Glove_Wisk'},{'Strapped Glove_Molten'},{'Strapped Glove_Kringle'},
+    {'Fingerless Glove_Scapter'},{'Fingerless Glove_Crystal'},
+    {'Fingerless Glove_Digital'},{'Fingerless Glove_Patch'},
+}
+
+-- CB weapon folder name → list of skin names (parsed from CB_ALL_SKINS)
+-- Key = prefix before the underscore in the skin id (e.g. "AK47", "USP")
+local CB_SKINS_BY_WEAPON = {}
+for _, entry in ipairs(CB_ALL_SKINS) do
+    local id   = entry[1]
+    local sep2 = id:find("_")
+    if sep2 then
+        local weapon = id:sub(1, sep2-1)
+        local skin   = id:sub(sep2+1)
+        if not CB_SKINS_BY_WEAPON[weapon] then
+            CB_SKINS_BY_WEAPON[weapon] = {"Default"}
+        end
+        table.insert(CB_SKINS_BY_WEAPON[weapon], skin)
+    end
+end
+
+-- Map from the UI label → CB prefix (e.g. "AK-47" → "AK47")
+local CB_WEAPON_MAP = {
+    ["AK-47"]         = "AK47",
+    ["AWP"]           = "AWP",
+    ["M4A4"]          = "M4A4",
+    ["M4A1-S"]        = "M4A1",
+    ["USP-S"]         = "USP",
+    ["Glock-18"]      = "Glock",
+    ["Desert Eagle"]  = "DesertEagle",
+    ["P250"]          = "P250",
+    ["AUG"]           = "AUG",
+    ["FAMAS"]         = "Famas",
+    ["MP9"]           = "MP9",
+    ["MAC-10"]        = "MAC10",
+    ["UMP-45"]        = "UMP",
+    ["P90"]           = "P90",
+    ["Negev"]         = "Negev",
+    ["Nova"]          = "Nova",
+    ["SG 553"]        = "SG",
+    ["Dual Berettas"] = "DualBerettas",
+    ["Five-SeveN"]    = "FiveSeven",
+    ["CZ75-Auto"]     = "CZ",
+    ["Galil AR"]      = "Galil",
+    -- Knives
+    ["Karambit"]       = "Karambit",
+    ["Butterfly Knife"]= "Butterfly Knife",
+    ["Gut Knife"]      = "Gut Knife",
+    ["Bayonet"]        = "Bayonet",
+    ["Falchion Knife"] = "Falchion Knife",
+    ["Flip Knife"]     = "Flip Knife",
+    ["Huntsman Knife"] = "Huntsman Knife",
+    -- Gloves
+    ["Sports Gloves"]    = "Sports Glove",
+    ["Hand Wraps"]       = "Handwraps",
+    ["Strapped Gloves"]  = "Strapped Glove",
+    ["Fingerless Gloves"]= "Fingerless Glove",
+}
+
+-- CB state
+local CB_SC = {
+    enabled   = false,
+    hooked    = false,
+    unlocked  = false,
+    selected  = {},  -- [weaponLabel] = skinName string
+    -- side: "Both", "TFolder", "CTFolder"
+    side      = "Both",
+}
+
+-- Get skin list for a UI weapon label
+local function cb_getSkins(weaponLabel)
+    local prefix = CB_WEAPON_MAP[weaponLabel]
+    if not prefix then return {"Default"} end
+    local list = CB_SKINS_BY_WEAPON[prefix]
+    if not list or #list <= 1 then return {"Default"} end
+    return list
+end
+
+-- Apply a skin by writing to SkinFolder StringValues
+-- weaponLabel = display name, skinName = the part after the underscore
+local function cb_applySkin(weaponLabel, skinName)
+    if not IS_COUNTERBLOX then return end
+    if not skinName or skinName == "Default" then return end
+    local prefix = CB_WEAPON_MAP[weaponLabel]
+    if not prefix then return end
+
+    -- The StringValue name inside TFolder/CTFolder matches the CB prefix
+    pcall(function()
+        local sf = lp:FindFirstChild("SkinFolder")
+        if not sf then return end
+        local side = CB_SC.side
+        for _, folder in ipairs({"TFolder","CTFolder"}) do
+            if side == "Both" or side == folder then
+                local f = sf:FindFirstChild(folder)
+                if f then
+                    local sv = f:FindFirstChild(prefix)
+                    if sv then sv.Value = skinName end
+                end
+            end
+        end
+    end)
+end
+
+-- CB knife type names (exact names used in allSkins prefixes)
+local CB_KNIFE_TYPES = {
+    "Default",
+    "Karambit",
+    "Butterfly Knife",
+    "Gut Knife",
+    "Bayonet",
+    "Falchion Knife",
+    "Flip Knife",
+    "Huntsman Knife",
+}
+
+-- Spy state: we capture the first real knife DataEvent the game fires
+-- (when the player equips their knife normally) and store its exact
+-- structure so we can replay it with a different knife type.
+local CB_knifeSpy = {
+    captured  = false,
+    remote    = nil,   -- the actual DataEvent RemoteEvent instance
+    template  = nil,   -- deep-copy of args[1] table from the real call
+    weaponKey = nil,   -- args[1][3] — the SkinFolder StringValue key name
+    side      = nil,   -- args[1][2] — "Both"/"TFolder"/"CTFolder"
+}
+local CB_forcedKnifeType = nil
+
+-- Replay a knife equip with a specific type+skin combo
+local function cb_fireKnifeEquip(knifeType, skinName)
+    if not CB_knifeSpy.captured then return false end
+    skinName = skinName or "Stock"
+    local payload     = {}
+    for i, v in ipairs(CB_knifeSpy.template) do payload[i] = v end
+    -- Slot 4 is the skin id table — replace just the first entry
+    payload[4]    = {knifeType .. "_" .. skinName}
+    payload[2]    = "Both"
+    payload[3]    = CB_knifeSpy.weaponKey
+    pcall(function()
+        CB_knifeSpy.remote:FireServer(payload)
+    end)
+    return true
+end
+
+local function cb_setKnifeType(knifeType)
+    if not IS_COUNTERBLOX then return end
+    CB_forcedKnifeType = (knifeType ~= "Default") and knifeType or nil
+    if CB_forcedKnifeType then
+        cb_fireKnifeEquip(CB_forcedKnifeType, "Stock")
+    end
+end
+
+-- Hook __namecall to unlock all skins + intercept DataEvent skin-apply calls
+local function cb_hook()
+    if CB_SC.hooked then return end
+    CB_SC.hooked = true
+
+    pcall(function()
+        -- Inject Client.CurrentInventory so the picker UI shows all skins
+        local Client = getsenv(lp.PlayerGui:WaitForChild("Client", 5))
+        if Client then
+            Client.CurrentInventory = CB_ALL_SKINS
+        end
+    end)
+
+    local mt2       = getrawmetatable(game)
+    local oldNC     = mt2.__namecall
+    setreadonly(mt2, false)
+
+    mt2.__namecall = newcclosure(function(self, ...)
+        local args = {...}
+        local method = getnamecallmethod()
+
+        if method == "InvokeServer" and tostring(self) == "Hugh" then
+            return  -- block anti-cheat ping
+        end
+
+        if method == "FireServer" then
+            -- Block reporting your own UserId
+            if args[1] == lp.UserId then return end
+
+            -- Inventory unlock: the inventory event has a 38-char remote name
+            -- and sends a table of skin entries as args[1]
+            if string.len(tostring(self)) == 38 then
+                if not CB_SC.unlocked then
+                    CB_SC.unlocked = true
+                    for _, v in ipairs(CB_ALL_SKINS) do
+                        local already = false
+                        for _, v2 in ipairs(args[1]) do
+                            if v[1] == v2[1] then already = true; break end
+                        end
+                        if not already then table.insert(args[1], v) end
+                    end
+                end
+                return
+            end
+
+            -- Skin-apply / knife-equip event via DataEvent remote
+            if tostring(self) == "DataEvent" and type(args[1]) == "table" and args[1][4] then
+                local fullId    = args[1][4][1]   -- e.g. "Karambit_Ruby" or "T Knife_Stock"
+                local weaponKey = args[1][3]       -- SkinFolder StringValue name
+                local side2     = args[1][2]
+
+                -- Spy: capture the first knife DataEvent so we can replay it
+                local knifeTypes = {"Karambit","Butterfly Knife","Gut Knife",
+                    "Bayonet","Falchion Knife","Flip Knife","Huntsman Knife",
+                    "T Knife","CT Knife"}
+                local isKnifeCall = false
+                for _, kt in ipairs(knifeTypes) do
+                    if fullId:sub(1, #kt) == kt then
+                        isKnifeCall = true; break
+                    end
+                end
+                if isKnifeCall and not CB_knifeSpy.captured then
+                    CB_knifeSpy.captured  = true
+                    CB_knifeSpy.remote    = self
+                    CB_knifeSpy.weaponKey = weaponKey
+                    CB_knifeSpy.side      = side2
+                    -- Deep copy the template (replace slot 4 later per-call)
+                    CB_knifeSpy.template = {}
+                    for i, v in ipairs(args[1]) do
+                        CB_knifeSpy.template[i] = v
+                    end
+                end
+
+                -- If we're forcing a knife type, rewrite this call
+                if CB_forcedKnifeType and isKnifeCall then
+                    local skinPart = fullId:match("_(.+)$") or "Stock"
+                    args[1][4][1] = CB_forcedKnifeType .. "_" .. skinPart
+                    fullId = args[1][4][1]
+                end
+
+                local currentSkin = fullId:match("_(.+)$") or fullId
+                pcall(function()
+                    local sf = lp:FindFirstChild("SkinFolder")
+                    if not sf then return end
+                    if side2 == "Both" then
+                        local tf  = sf:FindFirstChild("TFolder")
+                        local ctf = sf:FindFirstChild("CTFolder")
+                        if tf  and tf:FindFirstChild(weaponKey)  then tf:FindFirstChild(weaponKey).Value  = currentSkin end
+                        if ctf and ctf:FindFirstChild(weaponKey) then ctf:FindFirstChild(weaponKey).Value = currentSkin end
+                    else
+                        local f = sf:FindFirstChild(side2 .. "Folder")
+                        if f and f:FindFirstChild(weaponKey) then f:FindFirstChild(weaponKey).Value = currentSkin end
+                    end
+                end)
+            end
+        end
+
+        return oldNC(self, ...)
+    end)
+
+    setreadonly(mt2, true)
+
+    -- Clone SkinFolder fix (mirrors original script)
+    pcall(function()
+        local sf    = lp:WaitForChild("SkinFolder", 5)
+        if not sf then return end
+        local tClone  = sf.TFolder:Clone()
+        local ctClone = sf.CTFolder:Clone()
+        sf.TFolder:Destroy()
+        sf.CTFolder:Destroy()
+        tClone.Parent  = sf
+        ctClone.Parent = sf
+    end)
+end
+
 -- ─── Custom Knife system (from real source) ───────────
 local ck = {
     running       = false,
@@ -2038,50 +2473,103 @@ do local L, R = addPage("skins")
     local gDot = N("Frame",{Size=UDim2.fromOffset(8,8),Position=UDim2.fromOffset(12,14),BackgroundColor3=dotCol,BorderSizePixel=0},gRow); corner(4,gDot)
     N("TextLabel",{Size=UDim2.new(1,-28,1,0),Position=UDim2.fromOffset(26,0),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=13,Text="Game: "..GAME_NAME,TextColor3=C.text_w,TextXAlignment=Enum.TextXAlignment.Left},gRow)
 
-    -- ── Skin Changer ──────────────────────────────────
-    secHdr(L,"Skin Changer")
-    togRow(L,"Enable Skin Changer", false, function(v)
-        SC.enabled = v
-        if not v then sc_clearSkins() end
-    end)
-
-    -- Helper: make a skin dropdown for a weapon, reading live from RS
-    local function skinDropRow(parent, weaponName, label)
-        local opts = sc_getSkinList(weaponName)
-        SC.selectedSkins[weaponName] = opts[1]  -- default = first option
-        ddRow(parent, label or weaponName, opts, 1, function(idx)
-            SC.selectedSkins[weaponName] = opts[idx]
-            -- invalidate so periodic check re-applies immediately
-            for _, obj in ipairs(cam:GetChildren()) do
-                if obj.Name == weaponName then
-                    pcall(function() obj:SetAttribute("SkinApplied", nil) end)
-                end
+    if IS_COUNTERBLOX then
+        -- ══ COUNTER BLOX SKIN CHANGER ══════════════════
+        secHdr(L,"Counter Blox Skins")
+        togRow(L,"Enable Skin Changer", false, function(v)
+            CB_SC.enabled = v
+            if v and not CB_SC.hooked then
+                cb_hook()
             end
         end)
-    end
 
-    secHdr(L,"Gloves")
-    skinDropRow(L,"Sports Gloves","Sports Gloves")
+        -- Side selector
+        local SIDES = {"Both", "T Only", "CT Only"}
+        ddRow(L,"Apply To", SIDES, 1, function(idx)
+            CB_SC.side = ({"Both","TFolder","CTFolder"})[idx]
+        end)
 
-    secHdr(L,"Knives")
-    for _, kn in ipairs(SC_KNIVES) do
-        skinDropRow(L, kn)
-    end
+        -- Helper: CB skin dropdown — lists skins from CB_ALL_SKINS for that weapon
+        local function cbSkinRow(parent, weaponLabel)
+            local skins = cb_getSkins(weaponLabel)
+            if #skins <= 1 then return end  -- weapon has no skins, skip
+            CB_SC.selected[weaponLabel] = skins[1]
+            ddRow(parent, weaponLabel, skins, 1, function(idx)
+                CB_SC.selected[weaponLabel] = skins[idx]
+                if CB_SC.enabled then
+                    cb_applySkin(weaponLabel, skins[idx])
+                end
+            end)
+        end
 
-    secHdr(R,"CT Weapons")
-    for _, wn in ipairs(SC_CT) do
-        skinDropRow(R, wn)
-    end
+        secHdr(L,"Rifles & SMGs")
+        cbSkinRow(L,"AK-47"); cbSkinRow(L,"M4A4"); cbSkinRow(L,"M4A1-S")
+        cbSkinRow(L,"AWP");   cbSkinRow(L,"AUG");  cbSkinRow(L,"FAMAS")
+        cbSkinRow(L,"SG 553");cbSkinRow(L,"Galil AR")
+        secHdr(L,"Pistols")
+        cbSkinRow(L,"Glock-18");cbSkinRow(L,"USP-S");cbSkinRow(L,"Desert Eagle")
+        cbSkinRow(L,"P250");cbSkinRow(L,"Five-SeveN");cbSkinRow(L,"CZ75-Auto")
+        cbSkinRow(L,"Dual Berettas")
+        secHdr(L,"Heavy & SMGs")
+        cbSkinRow(L,"MAC-10");cbSkinRow(L,"MP9");cbSkinRow(L,"UMP-45")
+        cbSkinRow(L,"P90");cbSkinRow(L,"Negev");cbSkinRow(L,"Nova")
 
-    secHdr(R,"Shared Weapons")
-    for _, wn in ipairs(SC_SHARED) do
-        skinDropRow(R, wn)
-    end
+        secHdr(R,"Knife Type")
+        ddRow(R,"Knife Model", CB_KNIFE_TYPES, 1, function(idx)
+            cb_setKnifeType(CB_KNIFE_TYPES[idx])
+        end)
+        local kNoteF = N("Frame",{Size=UDim2.new(1,0,0,52),BackgroundColor3=Color3.fromRGB(12,20,50),BackgroundTransparency=0.20,BorderSizePixel=0,LayoutOrder=wo()},R)
+        corner(6,kNoteF); stroke(Color3.fromRGB(30,80,180),1,0.30,kNoteF)
+        N("TextLabel",{Size=UDim2.new(1,-16,1,0),Position=UDim2.fromOffset(10,0),BackgroundTransparency=1,Font=Enum.Font.Gotham,TextSize=11,TextWrapped=true,TextColor3=C.text_s,TextXAlignment=Enum.TextXAlignment.Left,
+            Text="ℹ  Equip your knife once in-game\n   first (so the hook captures it),\n   then pick a type here."},kNoteF)
 
-    -- ── Custom Knife ──────────────────────────────────
-    secHdr(R,"Custom Knife")
-    -- Only available in BloxStrike (has RS.Assets.Weapons knife models)
-    if IS_BLOXSTRIKE then
+        secHdr(R,"Knives")
+        cbSkinRow(R,"Karambit");cbSkinRow(R,"Butterfly Knife")
+        cbSkinRow(R,"Gut Knife");cbSkinRow(R,"Bayonet")
+        cbSkinRow(R,"Falchion Knife");cbSkinRow(R,"Flip Knife")
+        cbSkinRow(R,"Huntsman Knife")
+        secHdr(R,"Gloves")
+        cbSkinRow(R,"Sports Gloves");cbSkinRow(R,"Hand Wraps")
+        cbSkinRow(R,"Strapped Gloves");cbSkinRow(R,"Fingerless Gloves")
+
+        -- Info note
+        local noteF = N("Frame",{Size=UDim2.new(1,0,0,56),BackgroundColor3=Color3.fromRGB(12,20,50),BackgroundTransparency=0.20,BorderSizePixel=0,LayoutOrder=wo()},R)
+        corner(6,noteF); stroke(Color3.fromRGB(30,80,180),1,0.30,noteF)
+        N("TextLabel",{Size=UDim2.new(1,-16,1,0),Position=UDim2.fromOffset(10,0),BackgroundTransparency=1,Font=Enum.Font.Gotham,TextSize=11,TextWrapped=true,TextColor3=C.text_s,TextXAlignment=Enum.TextXAlignment.Left,
+            Text="ℹ  Hooks __namecall to unlock all skins\n   in your inventory. Set the skin then\n   re-equip the weapon to see it.\n   Enable once per session is enough."},noteF)
+
+    elseif IS_BLOXSTRIKE then
+        -- ══ BLOXSTRIKE SKIN CHANGER ════════════════════
+        secHdr(L,"Skin Changer")
+        togRow(L,"Enable Skin Changer", false, function(v)
+            SC.enabled = v
+            if not v then sc_clearSkins() end
+        end)
+
+        local function skinDropRow(parent, weaponName, label)
+            local opts = sc_getSkinList(weaponName)
+            SC.selectedSkins[weaponName] = opts[1]
+            ddRow(parent, label or weaponName, opts, 1, function(idx)
+                SC.selectedSkins[weaponName] = opts[idx]
+                for _, obj in ipairs(cam:GetChildren()) do
+                    if obj.Name == weaponName then
+                        pcall(function() obj:SetAttribute("SkinApplied", nil) end)
+                    end
+                end
+            end)
+        end
+
+        secHdr(L,"Gloves")
+        skinDropRow(L,"Sports Gloves","Sports Gloves")
+        secHdr(L,"Knives")
+        for _, kn in ipairs(SC_KNIVES) do skinDropRow(L, kn) end
+        secHdr(R,"CT Weapons")
+        for _, wn in ipairs(SC_CT) do skinDropRow(R, wn) end
+        secHdr(R,"Shared Weapons")
+        for _, wn in ipairs(SC_SHARED) do skinDropRow(R, wn) end
+
+        -- Custom Knife
+        secHdr(R,"Custom Knife")
         togRow(R,"Enable Custom Knife", false, function(v)
             ck.running = v
             if not v then ck_remove() end
@@ -2090,16 +2578,17 @@ do local L, R = addPage("skins")
             ck.selected = ckOptions[idx]
             if ck.spawned then ck_remove() end
         end)
-        -- Info
         local noteF = N("Frame",{Size=UDim2.new(1,0,0,46),BackgroundColor3=Color3.fromRGB(15,22,52),BackgroundTransparency=0.20,BorderSizePixel=0,LayoutOrder=wo()},R)
         corner(6,noteF); stroke(Color3.fromRGB(30,80,180),1,0.30,noteF)
         N("TextLabel",{Size=UDim2.new(1,-16,1,0),Position=UDim2.fromOffset(10,0),BackgroundTransparency=1,Font=Enum.Font.Gotham,TextSize=11,TextWrapped=true,TextColor3=C.text_s,TextXAlignment=Enum.TextXAlignment.Left,
-            Text="F = Inspect  •  LMB = Swing\nRequires you to be alive & have a knife equipped."},noteF)
+            Text="F = Inspect  •  LMB = Swing\nRequires alive & knife equipped."},noteF)
+
     else
-        local noF = N("Frame",{Size=UDim2.new(1,0,0,36),BackgroundColor3=Color3.fromRGB(50,20,10),BackgroundTransparency=0.25,BorderSizePixel=0,LayoutOrder=wo()},R)
-        corner(6,noF)
-        N("TextLabel",{Size=UDim2.new(1,-16,1,0),Position=UDim2.fromOffset(8,0),BackgroundTransparency=1,Font=Enum.Font.Gotham,TextSize=11,TextWrapped=true,TextColor3=Color3.fromRGB(255,120,60),TextXAlignment=Enum.TextXAlignment.Left,
-            Text="⚠  Custom Knife requires BloxStrike"},noF)
+        -- ══ UNKNOWN GAME ═══════════════════════════════
+        local noF = N("Frame",{Size=UDim2.new(1,0,0,52),BackgroundColor3=Color3.fromRGB(40,18,8),BackgroundTransparency=0.20,BorderSizePixel=0,LayoutOrder=wo()},L)
+        corner(6,noF); stroke(Color3.fromRGB(180,60,20),1,0.40,noF)
+        N("TextLabel",{Size=UDim2.new(1,-16,1,0),Position=UDim2.fromOffset(10,0),BackgroundTransparency=1,Font=Enum.Font.Gotham,TextSize=12,TextWrapped=true,TextColor3=Color3.fromRGB(255,140,60),TextXAlignment=Enum.TextXAlignment.Left,
+            Text="⚠  Skin Changer requires BloxStrike\nor Counter Blox.\n   Detected: "..GAME_NAME},noF)
     end
 end
 
